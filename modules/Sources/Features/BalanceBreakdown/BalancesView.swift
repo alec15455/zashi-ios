@@ -1,9 +1,6 @@
 //
 //  BalancesView.swift
 //  secant-testnet
-//
-//  Created by Lukáš Korba on 04.08.2022.
-//
 
 import SwiftUI
 import ComposableArchitecture
@@ -33,54 +30,59 @@ public struct BalancesView: View {
     public var body: some View {
         ScrollView {
             WithPerceptionTracking {
-                WalletBalancesView(
-                    store: store.scope(
-                        state: \.walletBalancesState,
-                        action: \.walletBalances
-                    ),
-                    tokenName: tokenName,
-                    underlinedAvailableBalance: false,
-                    couldBeHidden: true
-                )
-
-                Asset.Colors.primary.color
-                    .frame(height: 1)
-                    .padding(EdgeInsets(top: 0, leading: 30, bottom: 10, trailing: 30))
-                
-                balancesBlock()
-                
-                transparentBlock()
-                    .frame(minHeight: 166)
-                    .padding(.horizontal, store.isHintBoxVisible ? 15 : 30)
-                    .background {
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Design.Surfaces.strokePrimary.color)
-                    }
-                    .padding(.horizontal, 30)
-
-                if walletStatus == .restoring {
-                    Text(L10n.Balances.restoringWalletWarning)
-                        .zFont(.medium, size: 10, style: Design.Utility.ErrorRed._600)
-                        .lineLimit(nil)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 60)
-                        .padding(.vertical, 20)
-                }
-                
-                SyncProgressView(
-                    store: store.scope(
-                        state: \.syncProgressState,
-                        action: \.syncProgress
+                VStack(spacing: 24) {
+                    // Top Balance Section
+                    WalletBalancesView(
+                        store: store.scope(
+                            state: \.walletBalancesState,
+                            action: \.walletBalances
+                        ),
+                        tokenName: tokenName,
+                        underlinedAvailableBalance: false,
+                        couldBeHidden: true
                     )
-                )
-                .padding(.top, walletStatus == .restoring ? 0 : 40)
-                .padding(.bottom, 25)
-                .navigationLinkEmpty(
-                    isActive: store.bindingFor(.partialProposalError),
-                    destination: {
-                        PartialProposalErrorView(store: store.partialProposalErrorStore())
+                    .padding(.horizontal, 20)
+                    
+                    // Enhanced Divider
+                    Divider()
+                        .background(
+                            LinearGradient(
+                                colors: [
+                                    Asset.Colors.primary.color.opacity(0.1),
+                                    Asset.Colors.primary.color,
+                                    Asset.Colors.primary.color.opacity(0.1)
+                                ],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .padding(.horizontal, 16)
+                    
+                    // Balance Details
+                    balanceDetailsSection()
+                        .padding(.horizontal, 24)
+                    
+                    // Transparent Balance Card
+                    TransparentBalanceCard(
+                        store: store,
+                        isSensitiveContentHidden: isSensitiveContentHidden
+                    )
+                    .padding(.horizontal, 20)
+
+                    if walletStatus == .restoring {
+                        restoreWarningBanner()
                     }
-                )
+                    
+                    // Sync Progress
+                    SyncProgressView(
+                        store: store.scope(
+                            state: \.syncProgressState,
+                            action: \.syncProgress
+                        )
+                    )
+                    .padding(.top, walletStatus == .restoring ? 16 : 40)
+                    .padding(.bottom, 25)
+                }
             }
             .walletStatusPanel()
         }
@@ -94,109 +96,132 @@ public struct BalancesView: View {
         )
         .onAppear { store.send(.onAppear) }
         .onDisappear { store.send(.onDisappear) }
+        .navigationLinkEmpty(
+            isActive: store.bindingFor(.partialProposalError),
+            destination: {
+                PartialProposalErrorView(store: store.partialProposalErrorStore())
+            }
+        )
+    }
+    
+    @ViewBuilder
+    private func balanceDetailsSection() -> some View {
+        VStack(spacing: 20) {
+            balanceRow(
+                title: L10n.Balances.spendableBalance.uppercased(),
+                balance: store.shieldedBalance,
+                showShieldIcon: true
+            )
+            
+            balanceRow(
+                title: L10n.Balances.changePending.uppercased(),
+                balance: store.changePending,
+                showProgress: store.changePending.amount > 0
+            )
+            
+            balanceRow(
+                title: L10n.Balances.pendingTransactions.uppercased(),
+                balance: store.pendingTransactions,
+                showProgress: store.pendingTransactions.amount > 0
+            )
+        }
+        .padding(.vertical, 16)
+    }
+    
+    @ViewBuilder
+    private func balanceRow(
+        title: String,
+        balance: Zatoshi,
+        showShieldIcon: Bool = false,
+        showProgress: Bool = false
+    ) -> some View {
+        HStack(spacing: 12) {
+            Text(title)
+                .font(.custom(FontFamily.Inter.medium.name, size: 13))
+                .foregroundColor(Asset.Colors.primary.color)
+            
+            Spacer()
+            
+            HStack(spacing: 8) {
+                ZatoshiRepresentationView(
+                    balance: balance,
+                    fontName: FontFamily.Inter.semiBold.name,
+                    mostSignificantFontSize: 16,
+                    leastSignificantFontSize: 8,
+                    format: .expanded,
+                    couldBeHidden: true
+                )
+                
+                if showShieldIcon {
+                    Asset.Assets.shield.image
+                        .zImage(width: 11, height: 14, color: Asset.Colors.primary.color)
+                }
+                
+                if showProgress {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                        .frame(width: 14, height: 14)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+    
+    @ViewBuilder
+    private func restoreWarningBanner() -> some View {
+        Text(L10n.Balances.restoringWalletWarning)
+            .zFont(.medium, size: 10, style: Design.Utility.ErrorRed._600)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 12)
+            .background(Design.Utility.ErrorRed._100.color)
+            .cornerRadius(8)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 8)
     }
 }
 
-extension BalancesView {
-    @ViewBuilder func balancesBlock() -> some View {
-        VStack(spacing: 20) {
-            HStack(spacing: 0) {
-                Text(L10n.Balances.spendableBalance.uppercased())
-                    .font(.custom(FontFamily.Inter.regular.name, size: 13))
-                
-                Spacer()
-                
-                ZatoshiRepresentationView(
-                    balance: store.shieldedBalance,
-                    fontName: FontFamily.Inter.semiBold.name,
-                    mostSignificantFontSize: 16,
-                    leastSignificantFontSize: 8,
-                    format: .expanded,
-                    couldBeHidden: true
-                )
-                
-                Asset.Assets.shield.image
-                    .zImage(width: 11, height: 14, color: Asset.Colors.primary.color)
-                    .padding(.leading, 10)
-            }
-            
-            HStack(spacing: 0) {
-                Text(L10n.Balances.changePending.uppercased())
-                    .font(.custom(FontFamily.Inter.regular.name, size: 13))
-                
-                Spacer()
-                
-                ZatoshiRepresentationView(
-                    balance: store.changePending,
-                    fontName: FontFamily.Inter.semiBold.name,
-                    mostSignificantFontSize: 16,
-                    leastSignificantFontSize: 8,
-                    format: .expanded,
-                    couldBeHidden: true
-                )
-                .foregroundColor(Asset.Colors.shade55.color)
-                .padding(.trailing, store.changePending.amount > 0 ? 0 : 21)
-
-                if store.changePending.amount > 0 {
-                    progressViewLooping()
-                        .padding(.leading, 10)
-                }
-            }
-            
-            HStack(spacing: 0) {
-                Text(L10n.Balances.pendingTransactions.uppercased())
-                    .font(.custom(FontFamily.Inter.regular.name, size: 13))
-                
-                Spacer()
-                
-                ZatoshiRepresentationView(
-                    balance: store.pendingTransactions,
-                    fontName: FontFamily.Inter.semiBold.name,
-                    mostSignificantFontSize: 16,
-                    leastSignificantFontSize: 8,
-                    format: .expanded,
-                    couldBeHidden: true
-                )
-                .foregroundColor(Asset.Colors.shade55.color)
-                .padding(.trailing, store.pendingTransactions.amount > 0 ? 0 : 21)
-
-                if store.pendingTransactions.amount > 0 {
-                    progressViewLooping()
-                        .padding(.leading, 10)
-                }
+// MARK: - Transparent Balance Card
+private struct TransparentBalanceCard: View {
+    let store: StoreOf<Balances>
+    let isSensitiveContentHidden: Bool
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            if store.isHintBoxVisible {
+                hintBoxContent()
+            } else {
+                balanceContent()
             }
         }
-        .padding(.horizontal, 30)
-        .padding(.vertical, 15)
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Design.Surfaces.strokePrimary.color)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Design.Surfaces.strokePrimary.color.opacity(0.05))
+                )
+        )
     }
     
-    @ViewBuilder func transparentBlock() -> some View {
-        if store.isHintBoxVisible {
-            transparentBlockHintBox()
-                .frame(maxWidth: .infinity)
-        } else {
-            transparentBlockShielding()
-        }
-    }
-
-    @ViewBuilder private func transparentBlockShielding() -> some View {
-        VStack {
-            HStack(spacing: 0) {
+    @ViewBuilder
+    private func balanceContent() -> some View {
+        VStack(spacing: 16) {
+            HStack(spacing: 8) {
                 Button {
                     store.send(.updateHintBoxVisibility(true))
                 } label: {
-                    HStack(spacing: 3) {
+                    HStack(spacing: 4) {
                         Text(L10n.Balances.transparentBalance.uppercased())
-                            .font(.custom(FontFamily.Inter.regular.name, size: 13))
-                            .fixedSize()
-
+                            .font(.custom(FontFamily.Inter.medium.name, size: 13))
+                        
                         Image(systemName: "questionmark.circle.fill")
                             .resizable()
-                            .frame(width: 11, height: 11)
-                            .padding(.bottom, 10)
+                            .frame(width: 12, height: 12)
                     }
-                    .foregroundColor(Asset.Colors.primary.color)
                 }
+                .foregroundColor(Asset.Colors.primary.color)
                 
                 Spacer()
                 
@@ -208,63 +233,61 @@ extension BalancesView {
                     format: .expanded,
                     couldBeHidden: true
                 )
-                .foregroundColor(Asset.Colors.shade55.color)
             }
-            .padding(.bottom, 10)
-
-            if store.isShieldingFunds {
-                ZashiButton(
-                    L10n.Balances.shieldingInProgress,
-                    accessoryView: ProgressView()
-                ) { }
-                .padding(.bottom, 15)
-                .disabled(true)
-            } else {
-                ZashiButton(
-                    L10n.Balances.shieldButtonTitle
-                ) {
-                    store.send(.shieldFunds)
+            
+            VStack(spacing: 8) {
+                if store.isShieldingFunds {
+                    shieldingInProgressButton()
+                } else {
+                    shieldFundsButton()
                 }
-                .padding(.bottom, 15)
-                .disabled(!store.isShieldableBalanceAvailable || store.isShieldingFunds || isSensitiveContentHidden)
+                
+                Text("(\(ZatoshiStringRepresentation.feeFormat))")
+                    .font(.custom(FontFamily.Inter.regular.name, size: 11))
+                    .foregroundColor(Asset.Colors.shade55.color)
             }
-
-            Text("(\(ZatoshiStringRepresentation.feeFormat))")
-                .font(.custom(FontFamily.Inter.semiBold.name, size: 11))
         }
     }
-
-    @ViewBuilder private func transparentBlockHintBox() -> some View {
-        VStack {
+    
+    @ViewBuilder
+    private func shieldingInProgressButton() -> some View {
+        ZashiButton(
+            L10n.Balances.shieldingInProgress,
+            accessoryView: ProgressView()
+        ) { }
+        .disabled(true)
+    }
+    
+    @ViewBuilder
+    private func shieldFundsButton() -> some View {
+        ZashiButton(L10n.Balances.shieldButtonTitle) {
+            store.send(.shieldFunds)
+        }
+        .disabled(!store.isShieldableBalanceAvailable || store.isShieldingFunds || isSensitiveContentHidden)
+    }
+    
+    @ViewBuilder
+    private func hintBoxContent() -> some View {
+        VStack(spacing: 16) {
             Text(L10n.Balances.HintBox.message)
                 .font(.custom(FontFamily.Inter.regular.name, size: 11))
                 .multilineTextAlignment(.center)
                 .foregroundColor(Asset.Colors.primary.color)
-            
-            Spacer()
             
             Button {
                 store.send(.updateHintBoxVisibility(false))
             } label: {
                 Text(L10n.Balances.HintBox.dismiss.uppercased())
                     .font(.custom(FontFamily.Inter.semiBold.name, size: 10))
-                  .underline()
-                  .foregroundColor(Asset.Colors.primary.color)
+                    .underline()
+                    .foregroundColor(Asset.Colors.primary.color)
             }
         }
-        .hintBoxShape()
-        .padding(.vertical, 15)
-    }
-    
-    @ViewBuilder func progressViewLooping() -> some View {
-        ProgressView()
-            .scaleEffect(0.7)
-            .frame(width: 11, height: 14)
+        .padding(.vertical, 8)
     }
 }
 
 // MARK: - Previews
-
 #Preview {
     NavigationView {
         BalancesView(
@@ -293,7 +316,6 @@ extension BalancesView {
 }
 
 // MARK: - Store
-
 extension StoreOf<Balances> {
     func partialProposalErrorStore() -> StoreOf<PartialProposalError> {
         self.scope(
@@ -304,7 +326,6 @@ extension StoreOf<Balances> {
 }
 
 // MARK: - Placeholders
-
 extension Balances.State {
     public static let placeholder = Balances.State(
         autoShieldingThreshold: .zero,
@@ -335,8 +356,7 @@ extension StoreOf<Balances> {
     }
 }
 
-// MARK: - Bondings
-
+// MARK: - Bindings
 extension StoreOf<Balances> {
     func bindingFor(_ destination: Balances.State.Destination) -> Binding<Bool> {
         Binding<Bool>(
